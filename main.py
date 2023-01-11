@@ -1,197 +1,345 @@
-import pygame
-import sys
-import copy
+import math
 import random
+import pygame
 
 pygame.init()
-screen = pygame.display.set_mode((1000, 500))
-FPS = 30
-fpsClock = pygame.time.Clock()
-black = (0, 0, 0)
-white = (255, 255, 255)
+
+width = 1000
+hight = 700
+
+pygame.display.set_caption('Астероиды')
+win = pygame.display.set_mode((width, hight))
+clock = pygame.time.Clock()
+
+#загрузка иконок
+game_screen = pygame.image.load('asteroidsPics/space_game_screen.jpg')
+alien_boo = pygame.image.load('asteroidsPics/aliens_boo.png')
+my_ship = pygame.image.load('asteroidsPics/our_sheep.png')
+asteroid50 = pygame.image.load('asteroidsPics/asteroid_50.png')
+asteroid100 = pygame.image.load('asteroidsPics/asteroid_100.png')
+asteroid150 = pygame.image.load('asteroidsPics/asteroid_150.png')
+
+#обнуление переменных
+gameover = False
+lives = 3
+score = 0
+rapidFire = False
+rfStart = -1
+highScore = 0
+
+#задание свойств игрока (ракета)
+class Player(object):
+    def __init__(self):
+        self.img = my_ship
+        self.w = self.img.get_width()
+        self.h = self.img.get_height()
+        self.x = width//2
+        self.y = hight//2
+        self.angle = 0
+        self.rotatedSurf = pygame.transform.rotate(self.img, self.angle)
+        self.rotatedRect = self.rotatedSurf.get_rect()
+        self.rotatedRect.center = (self.x, self.y)
+        self.cosine = math.cos(math.radians(self.angle + 90))
+        self.sine = math.sin(math.radians(self.angle + 90))
+        self.head = (self.x + self.cosine * self.w//2, self.y - self.sine * self.h//2)
+
+    def draw(self, win):
+        #win.blit(self.img, [self.x, self.y, self.w, self.h])
+        win.blit(self.rotatedSurf, self.rotatedRect)
+
+    def turnLeft(self):
+        self.angle += 5
+        self.rotatedSurf = pygame.transform.rotate(self.img, self.angle)
+        self.rotatedRect = self.rotatedSurf.get_rect()
+        self.rotatedRect.center = (self.x, self.y)
+        self.cosine = math.cos(math.radians(self.angle + 90))
+        self.sine = math.sin(math.radians(self.angle + 90))
+        self.head = (self.x + self.cosine * self.w//2, self.y - self.sine * self.h//2)
+
+    def turnRight(self):
+        self.angle -= 5
+        self.rotatedSurf = pygame.transform.rotate(self.img, self.angle)
+        self.rotatedRect = self.rotatedSurf.get_rect()
+        self.rotatedRect.center = (self.x, self.y)
+        self.cosine = math.cos(math.radians(self.angle + 90))
+        self.sine = math.sin(math.radians(self.angle + 90))
+        self.head = (self.x + self.cosine * self.w//2, self.y - self.sine * self.h//2)
+
+    def moveForward(self):
+        self.x += self.cosine * 6
+        self.y -= self.sine * 6
+        self.rotatedSurf = pygame.transform.rotate(self.img, self.angle)
+        self.rotatedRect = self.rotatedSurf.get_rect()
+        self.rotatedRect.center = (self.x, self.y)
+        self.cosine = math.cos(math.radians(self.angle + 90))
+        self.sine = math.sin(math.radians(self.angle + 90))
+        self.head = (self.x + self.cosine * self.w // 2, self.y - self.sine * self.h // 2)
+
+    def updateLocation(self):
+        if self.x > width + 50:
+            self.x = 0
+        elif self.x < 0 - self.w:
+            self.x = width
+        elif self.y < -50:
+            self.y = hight
+        elif self.y > hight + 50:
+            self.y = 0
+
+#задание свойств огня (ракет)
+class Bullet(object):
+    def __init__(self):
+        self.point = player.head
+        self.x, self.y = self.point
+        self.w = 4
+        self.h = 4
+        self.c = player.cosine
+        self.s = player.sine
+        self.xv = self.c * 10
+        self.yv = self.s * 10
+
+    def move(self):
+        self.x += self.xv
+        self.y -= self.yv
+
+    def draw(self, win):
+        pygame.draw.rect(win, (255, 255, 255), [self.x, self.y, self.w, self.h])
+
+    def checkOffScreen(self):
+        if self.x < -50 or self.x > width or self.y > hight or self.y < -50:
+            return True
+
+#задание свойств астероидов
+class Asteroid(object):
+    def __init__(self, rank):
+        self.rank = rank
+        if self.rank == 1:
+            self.image = asteroid50
+        elif self.rank == 2:
+            self.image = asteroid100
+        else:
+            self.image = asteroid150
+        self.w = 50 * rank
+        self.h = 50 * rank
+        self.ranPoint = random.choice([(random.randrange(0, width-self.w), random.choice([-1*self.h - 5, hight + 5])), (random.choice([-1*self.w - 5, width + 5]), random.randrange(0, hight - self.h))])
+        self.x, self.y = self.ranPoint
+        if self.x < width//2:
+            self.xdir = 1
+        else:
+            self.xdir = -1
+        if self.y < hight//2:
+            self.ydir = 1
+        else:
+            self.ydir = -1
+        self.xv = self.xdir * random.randrange(1,3)
+        self.yv = self.ydir * random.randrange(1,3)
+
+    def draw(self, win):
+        win.blit(self.image, (self.x, self.y))
+
+#задание свойств инопланетяшек
+class Alien(object):
+    def __init__(self):
+        self.img = alien_boo
+        self.w = self.img.get_width()
+        self.h = self.img.get_height()
+        self.ranPoint = random.choice([(random.randrange(0, width - self.w), random.choice([-1 * self.h - 5, hight + 5])),
+                                       (random.choice([-1 * self.w - 5, width + 5]), random.randrange(0, hight - self.h))])
+        self.x, self.y = self.ranPoint
+        if self.x < width//2:
+            self.xdir = 1
+        else:
+            self.xdir = -1
+        if self.y < hight//2:
+            self.ydir = 1
+        else:
+            self.ydir = -1
+        self.xv = self.xdir * 2
+        self.yv = self.ydir * 2
+
+    def draw(self, win):
+        win.blit(self.img, (self.x, self.y))
+
+#задание свойств инопланетяшек-огня
+class AlienBullet(object):
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.w = 4
+        self.h = 4
+        self.dx, self.dy = player.x - self.x, player.y - self.y
+        self.dist = math.hypot(self.dx, self.dy)
+        self.dx, self.dy = self.dx / self.dist, self.dy / self.dist
+        self.xv = self.dx * 5
+        self.yv = self.dy * 5
+
+    def draw(self, win):
+        pygame.draw.rect(win, (255, 255, 255), [self.x, self.y, self.w, self.h])
 
 
-# ____________________________________________________________________func_start
-# ________________________________________________________________
 
-def run():
-    # задание параметров базового экрана
-    global screen
-    screen.fill((192, 220, 192))
-    pygame.display.flip()
 
-    pygame.display.set_caption('Bulls & Cows')
+def redrawGameWindow():
+    win.blit(game_screen, (0,0))
+    font = pygame.font.SysFont('сomic sans MS', 40)
+    livesText = font.render('Жизни: ' + str(lives), 1, (255, 255, 255))
+    playAgainText = font.render('Нажми "Enter" чтобы сыграть еще раз', 1, (255,255,255))
+    newRecord = font.render('Поздравляю! Новый рекорд ' + str(score), 1, (255, 255, 255))
+    scoreText = font.render('Очки: ' + str(score), 1, (255,255,255))
+    highScoreText = font.render('Рекорд: ' + str(highScore), 1, (255, 255, 255))
+    tip = font.render('Нажми "Пробел" чтобы стрелять', 1, (255,255,255))
+
+    player.draw(win)
+    for a in asteroids:
+        a.draw(win)
+    for b in playerBullets:
+        b.draw(win)
+    for a in aliens:
+        a.draw(win)
+    for b in alienBullets:
+        b.draw(win)
+
+    if rapidFire:
+        pygame.draw.rect(win, (0, 0, 0), [width//2 - 51, 19, 102, 22])
+        pygame.draw.rect(win, (255, 255, 255), [width//2 - 50, 20, 100 - 100*(count - rfStart)/500, 20])
+
+    if gameover:
+        win.blit(playAgainText, (width//2-playAgainText.get_width()//2, hight//2 - playAgainText.get_height()//2))
+        if score > highScore:
+            win.blit(newRecord, (width // 2 - newRecord.get_width() // 2, (hight // 2 - newRecord.get_height() // 2) - 50))
+    win.blit(scoreText, (width- scoreText.get_width() - 25, 35))
+    win.blit(livesText, (35, 35))
+    win.blit(tip, (35, hight-35))
+    win.blit(highScoreText, (width - highScoreText.get_width() -25, 45 + scoreText.get_height()))
     pygame.display.update()
 
 
-def end():
-    # задание цикла для закрытия программы при нажатии кнопки
-    game_over = False
-    while not game_over:
-        for event in pygame.event.get():
-            print(event)
-            if event.type == pygame.QUIT:
-                game_over = True
+
+player = Player()
+playerBullets = []
+asteroids = []
+count = 0
+aliens = []
+alienBullets = []
+run = True
+while run:
+    clock.tick(60)
+    count += 1
+    if not gameover:
+        if count % 50 == 0:
+            ran = random.choice([1,1,1,2,2,3])
+            asteroids.append(Asteroid(ran))
+        if count % 750 == 0:
+            aliens.append(Alien())
+        for i, a in enumerate(aliens):
+            a.x += a.xv
+            a.y += a.yv
+            if a.x > width + 150 or a.x + a.w < -100 or a.y > hight + 150 or a.y + a.h < -100:
+                aliens.pop(i)
+            if count % 60 == 0:
+                alienBullets.append(AlienBullet(a.x + a.w//2, a.y + a.h//2))
+
+            for b in playerBullets:
+                if (b.x >= a.x and b.x <= a.x + a.w) or b.x + b.w >= a.x and b.x + b.w <= a.x + a.w:
+                    if (b.y >= a.y and b.y <= a.y + a.h) or b.y + b.h >= a.y and b.y + b.h <= a.y + a.h:
+                        aliens.pop(i)
+                        score += 50
+                        break
+
+        for i, b in enumerate(alienBullets):
+            b.x += b.xv
+            b.y += b.yv
+            if (b.x >= player.x - player.w//2 and b.x <= player.x + player.w//2) or b.x + b.w >= player.x - player.w//2 and b.x + b.w <= player.x + player.w//2:
+                if (b.y >= player.y-player.h//2 and b.y <= player.y + player.h//2) or b.y + b.h >= player.y - player.h//2 and b.y + b.h <= player.y + player.h//2:
+                    lives -= 1
+                    alienBullets.pop(i)
+                    break
+
+        player.updateLocation()
+        for b in playerBullets:
+            b.move()
+            if b.checkOffScreen():
+                playerBullets.pop(playerBullets.index(b))
 
 
-def image(link, pos=(500, 250)):
-    # вставка изображения
-    image = pygame.image.load(link)
-    position_image = image.get_rect(center=(pos))
-    screen.blit(image, position_image)
-    pygame.display.update()
+        for a in asteroids:
+            a.x += a.xv
+            a.y += a.yv
+
+            if (a.x >= player.x - player.w//2 and a.x <= player.x + player.w//2) or (a.x + a.w <= player.x + player.w//2 and a.x + a.w >= player.x - player.w//2):
+                if(a.y >= player.y - player.h//2 and a.y <= player.y + player.h//2) or (a.y  +a.h >= player.y - player.h//2 and a.y + a.h <= player.y + player.h//2):
+                    lives -= 1
+                    asteroids.pop(asteroids.index(a))
+                    break
+
+            # bullet collision
+            for b in playerBullets:
+                if (b.x >= a.x and b.x <= a.x + a.w) or b.x + b.w >= a.x and b.x + b.w <= a.x + a.w:
+                    if (b.y >= a.y and b.y <= a.y + a.h) or b.y + b.h >= a.y and b.y + b.h <= a.y + a.h:
+                        if a.rank == 3:
+                            score += 10
+                            na1 = Asteroid(2)
+                            na2 = Asteroid(2)
+                            na1.x = a.x
+                            na2.x = a.x
+                            na1.y = a.y
+                            na2.y = a.y
+                            asteroids.append(na1)
+                            asteroids.append(na2)
+                        elif a.rank == 2:
+                            score += 20
+                            na1 = Asteroid(1)
+                            na2 = Asteroid(1)
+                            na1.x = a.x
+                            na2.x = a.x
+                            na1.y = a.y
+                            na2.y = a.y
+                            asteroids.append(na1)
+                            asteroids.append(na2)
+                        else:
+                            score += 30
+                        asteroids.pop(asteroids.index(a))
+                        playerBullets.pop(playerBullets.index(b))
+                        break
+
+        if lives <= 0:
+            gameover = True
+
+        if rfStart != -1:
+            if count - rfStart > 500:
+                rapidFire = False
+                rfStart = -1
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:
+            player.turnLeft()
+        if keys[pygame.K_RIGHT]:
+            player.turnRight()
+        if keys[pygame.K_UP]:
+            player.moveForward()
+        if keys[pygame.K_SPACE]:
+            if rapidFire:
+                playerBullets.append(Bullet())
 
 
-def title(text, size=40, font='calibri', color=(0, 0, 0), pos=(500, 150)):
-    # вставка текста
-    f = pygame.font.SysFont(font, size)
-    t = f.render(text, True, color)
-    position = t.get_rect(center=(pos))
-    screen.blit(t, position)
-    pygame.display.update()
-
-
-def input(count):
-    global screen
-    global text_surface
-    global user_number
-    # основной шрифт для ввода
-    base_font = pygame.font.Font(None, 32)
-    user_text = ''
-    # создангие области ввода
-    input_space = pygame.Rect(450, 200, 120, 32)
-    active = True
-    while active:
-        for event in pygame.event.get():
-            # закрытие окна
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-                # нажатие клавиши
-            if event.type == pygame.KEYDOWN:
-                # проверка на бэкспейс + стирание написанного
-                if event.key == pygame.K_BACKSPACE:
-                    user_text = user_text[:-1]
-                else:
-                    user_text += event.unicode
-        user_number = copy.deepcopy(user_text)
-        n = 0
-        for i in user_number:
-            if i == ' ':
-                n += 1
-
-
-        if len(user_text) == count:
-            active = False
-            user_text = ''
-            # заливка области ввода
-        color = pygame.Color(68, 148, 74)
-        # добавление на экран области ввода
-        pygame.draw.rect(screen, color, input_space)
-        # рендер вводимого текста
-        text_surface = base_font.render(user_text, True, (255, 238, 221))
-        # фиксация области ввода + ее изменение в зав-ти от букв
-        screen.blit(text_surface, (input_space.x + 5, input_space.y + 5))
-        input_space.w = max(100, text_surface.get_width() + 10)
-        pygame.display.update()
-        pygame.display.flip()
-
-
-
-
-# ________________________________________________________________
-# ____________________________________________________________________func_end
-
-run()
-
-title('Добро пожаловать в игру Быки и Коровы!')
-
-# _____________________ создание начального экрана
-image('Images/Bull.png', pos=(600, 250))
-image('Images/Cow.png', pos=(400, 250))
-
-image_play = pygame.image.load('Images/play.png')
-position_image_play = image_play.get_rect(center = (500, 350))
-screen.blit(image_play,position_image_play)
-
-image('Images/flower.png', pos=(950, 450))
-image('Images/flower.png', pos=(950, 50))
-image('Images/flower.png', pos=(50, 450))
-image('Images/flower.png', pos=(50, 50))
-
-# _____________________ начало игры по кнопке play
-play = False
-while not play:
     for event in pygame.event.get():
-        if event.type == pygame.QUIT:  # нажатие на значок выхода
-            exit()
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            pygame.mouse.get_rel()
-    if pygame.mouse.get_focused() and position_image_play.collidepoint(pygame.mouse.get_pos()):
-        btns = pygame.mouse.get_pressed()
-        if btns[0]:
-            run()
-            play = True
+        if event.type == pygame.QUIT:
+            run = False
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                if not gameover:
+                    if not rapidFire:
+                        playerBullets.append(Bullet())
 
-# _____________________ генерирование числа компьютером
-comp_number = []
-while len(comp_number) < 4:
-    a = random.randint(0, 9)
-    if str(a) not in comp_number:
-        comp_number.append(str(a))
-title('Ваши попытки: ', size=20, pos=(900, 50))
-print(comp_number)
+            if event.key == pygame.K_RETURN:
+                if gameover:
+                    gameover = False
+                    lives = 3
+                    asteroids.clear()
+                    aliens.clear()
+                    alienBullets.clear()
+                    if score > highScore:
+                        highScore = score
+                    score = 0
 
-# _____________________ цикл основного алгоритма игры
-title('Введите четыре цифры через пробел:', size=30)
-y = 80
-play = True
-while play == True:
-
-    cow = 0; bull = 0
-    input(7)
-    user_number = str(user_number).split()
-
-    k = 0
-    for i in user_number:
-        k = user_number.count(i) + k
-
-    if k > 4:
-        title('Число не может иметь одинаковые числа. Попробуйте еще раз ', size=30, pos=(500, 350))
-        continue
-    else:
-        pygame.draw.rect(screen, (192, 220, 192), (90, 310, 900, 100))
-    title(str(user_number), size=20, pos=(900, y))
-    y += 20
-    for n in range(4):
-        if comp_number[n] == user_number[n]:
-            bull += 1
-        elif user_number[n] in comp_number:
-            cow += 1
-    base_font = pygame.font.Font(None, 32)
-    cow_space = pygame.Rect(150, 200, 23, 32)
-    bull_space = pygame.Rect(150, 250, 23, 32)
-    color = pygame.Color(68, 148, 74)
-    # вывод поля со значением коров
-    image('Images/Cow.png', pos=(100, 225))
-    pygame.draw.rect(screen, color, cow_space)
-    text_surface = base_font.render(str(cow), True, (255, 238, 221))
-    screen.blit(text_surface, (cow_space.x + 5, cow_space.y + 5))
-    # вывод поля со значением быков
-    image('Images/Bull.png', pos=(100, 275))
-    pygame.draw.rect(screen, color, bull_space)
-    text_surface = base_font.render(str(bull), True, (255, 238, 221))
-    screen.blit(text_surface, (bull_space.x + 5, bull_space.y + 5))
-
-    if bull == 4:
-        run()
-        image('Images/win.jpg', pos=(500, 175))
-        title('Число угадано. Вы победили!', size=30, pos=(500, 350))
-
-        play = False
-
-pygame.display.update()
-pygame.display.flip()
-
-end()
-
+    redrawGameWindow()
+pygame.quit()
