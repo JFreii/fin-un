@@ -17,7 +17,6 @@ alien_boo = pygame.image.load('asteroidsPics/aliens_boo.png')
 my_ship = pygame.image.load('asteroidsPics/our_sheep.png')
 asteroid50 = pygame.image.load('asteroidsPics/asteroid_50.png')
 asteroid100 = pygame.image.load('asteroidsPics/asteroid_100.png')
-asteroid150 = pygame.image.load('asteroidsPics/asteroid_150.png')
 
 #обнуление переменных
 gameover = False
@@ -44,7 +43,6 @@ class Player(object):
         self.head = (self.x + self.cosine * self.w//2, self.y - self.sine * self.h//2)
 
     def draw(self, win):
-        #win.blit(self.img, [self.x, self.y, self.w, self.h])
         win.blit(self.rotatedSurf, self.rotatedRect)
 
     def turnLeft(self):
@@ -114,10 +112,8 @@ class Asteroid(object):
         self.rank = rank
         if self.rank == 1:
             self.image = asteroid50
-        elif self.rank == 2:
-            self.image = asteroid100
         else:
-            self.image = asteroid150
+            self.image = asteroid100
         self.w = 50 * rank
         self.h = 50 * rank
         self.ranPoint = random.choice([(random.randrange(0, width-self.w), random.choice([-1*self.h - 5, hight + 5])), (random.choice([-1*self.w - 5, width + 5]), random.randrange(0, hight - self.h))])
@@ -173,7 +169,7 @@ class AlienBullet(object):
         self.yv = self.dy * 5
 
     def draw(self, win):
-        pygame.draw.rect(win, (255, 255, 255), [self.x, self.y, self.w, self.h])
+        pygame.draw.rect(win, (255, 0, 0), [self.x, self.y, self.w, self.h])
 
 
 
@@ -226,7 +222,7 @@ while run:
     count += 1
     if not gameover:
         if count % 50 == 0:
-            ran = random.choice([1,1,1,2,2,3])
+            ran = random.choice([1,1,1,2,2])
             asteroids.append(Asteroid(ran))
         if count % 750 == 0:
             aliens.append(Alien())
